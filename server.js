@@ -10,6 +10,10 @@ const port = 8080;
 
 app.use(bodyParser.json());
 app.use(cors());
+
+app.get('/add', (req, res) => {
+    res.sendFile(path.join(__dirname, 'add.html'));
+});
 app.post('/add', async (req, res) => {
     try {
         const { key, value } = req.body;
