@@ -42,4 +42,3 @@ module.exports = {
 }
 
 
-write('key1', 'value1')
