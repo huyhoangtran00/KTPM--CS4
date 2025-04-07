@@ -47,28 +47,28 @@
 <body>
     <h1>Giá trị hiện tại:</h1>
     <p id="value">Đang tải...</p>
-    <small>(Tự động cập nhật mỗi 2 giây)</small>
+    <small>(Tự động cập nhật khi có sự thay đổi)</small>
 
+    <script src="/socket.io/socket.io.js"></script> <!-- Kết nối Socket.IO -->
     <script>
+        const socket = io();  // Kết nối với server qua Socket.IO
         const locationPath = window.location.pathname.split("/");
-        const key = locationPath[locationPath.length - 1];
+        const key = locationPath[locationPath.length - 1];  // Lấy key từ URL
 
-        async function fetchValue() {
-            try {
-                const response = await fetch(`/get/${key}`);
-                if (response.ok) {
-                    const data = await response.text();
-                    document.getElementById('value').innerText = data;
-                } else {
-                    document.getElementById('value').innerText = "Không lấy được dữ liệu!";
-                }
-            } catch (error) {
-                document.getElementById('value').innerText = "Lỗi kết nối!";
+        // Gửi yêu cầu để lấy giá trị ban đầu của key
+        fetch(`/get/${key}`)
+            .then(response => response.text())
+            .then(data => {
+                document.getElementById('value').innerText = data;  // Hiển thị giá trị ban đầu
+            })
+            .catch(error => console.error('Error:', error));
+
+        // Lắng nghe sự kiện updateValue từ server
+        socket.on('updateValue', (data) => {
+            if (data.key === key) {
+                document.getElementById('value').innerText = data.value;  // Cập nhật giá trị khi có sự thay đổi
             }
-        }
-
-        fetchValue();
-        setInterval(fetchValue, 2000);
+        });
     </script>
 </body>
 </html>
