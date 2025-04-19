@@ -46,6 +46,27 @@
     publisherClient.on('error', (err) => console.error('[Redis Publisher] Error:', err));
     subscriberClient.on('error', (err) => console.error('[Redis Subscriber] Error:', err));
 
+    // Hàm xử lý ghi dữ liệu + cập nhật Redis pub/sub + xóa cache
+    async function addData(key, value) {
+    try {
+        // Ghi vào DB
+        await Persistent.write(key, value);
+        console.log(`[addData] DB saved: ${key} = ${value}`);
+
+        // Xoá cache cũ trong Redis (nếu có)
+        await publisherClient.del(`metal:${key}`);
+        console.log(`[addData] Cache deleted: metal:${key}`);
+
+        // Gửi pub/sub tới các subscriber
+        const message = JSON.stringify({ key, value });
+        await publisherClient.publish(key, message);
+        console.log(`[addData] Published to Redis channel '${key}': ${message}`);
+    } catch (err) {
+        console.error(`[addData] Error processing ${key}:`, err.message);
+        throw err;
+    }
+}
+
     async function setupRedis() {
         try {
             await publisherClient.connect();
@@ -83,75 +104,76 @@
 
     async function fetchAndStoreMetalPrices() {
         console.log('[Metal Price] Bắt đầu cập nhật giá...');
-        
+    
         for (const metal of METALS) {
             try {
                 const response = await axios.get(`${GOLD_API_URL}${metal.symbol}`);
-                
+    
                 let price;
                 if (response.data && typeof response.data.price !== 'undefined') {
                     price = response.data.price;
                 } else {
                     throw new Error('Cấu trúc response không hợp lệ');
                 }
-                
+    
                 console.log(`[Metal Price] ${metal.name}: ${price}`);
-                
-                await Persistent.write(metal.name, price.toString());
-                console.log(`[Metal Price] Đã lưu ${metal.name} vào DB`);
-                
-                const message = JSON.stringify({ 
-                    key: metal.name, 
-                    value: price 
-                });
-                await publisherClient.publish(metal.name, message);
-                console.log(`[Metal Price] Đã gửi cập nhật ${metal.name} qua Redis`);
-                
+    
+                // Ghi DB + xoá cache + publish
+                await addData(metal.name, price.toString());
+    
             } catch (error) {
                 console.error(`[Metal Price] Lỗi khi lấy giá ${metal.name}:`, error.message);
             }
-            
+    
+            // Tạm dừng giữa các lần gọi API (tránh spam)
             await new Promise(resolve => setTimeout(resolve, 500));
         }
-        
+    
         console.log('[Metal Price] Hoàn thành cập nhật giá');
     }
 
-    cron.schedule('*/1 * * * *', async () => {
+    cron.schedule('*/5 * * * *', async () => {
         console.log('[Cron] Tự động cập nhật giá');
         await fetchAndStoreMetalPrices();
     });
-    
     app.post('/add', async (req, res) => {
-        if (!publisherClient.isReady) {
-            console.error("[POST /add] Redis Publisher not ready.");
-            return res.status(503).send("Service temporarily unavailable (Redis Publisher).");
-        }
         try {
             const { key, value } = req.body;
-            console.log(`[POST /add] Received request: key=${key}, value=${value}`);
-
-            const result = await Persistent.write(key, value);
-            console.log(`[POST /add] Persistent.write result: ${result}`);
-            res.status(200).send(result + " successfully!"); 
-            const message = JSON.stringify({ key, value }); 
-            await publisherClient.publish(key, message);
-            console.log(`[Redis Publisher] Published message to channel '${key}': ${message}`);
-
+            console.log(`[POST /add] Received: ${key} = ${value}`);
+            await addData(key, value);
+            res.status(200).send('OK');
         } catch (err) {
-            console.error("[POST /add] Error:", err);
+            console.error('[POST /add] Error:', err);
             res.status(500).send(err.toString());
         }
     });
 
     app.get('/get/:id', async (req, res) => {
+        const id = req.params.id;
+        console.log(`[GET /get/${id}] Received request.`);
+    
+        const cacheKey = `metal:${id}`;
+    
         try {
-            const id = req.params.id;
-            console.log(`[GET /get/${id}] Received request.`);
+            // Kiểm tra cache trong Redis
+            const cachedValue = await publisherClient.get(cacheKey);
+    
+            if (cachedValue !== null) {
+                console.log(`[Cache] Trả về từ Redis cache: ${cacheKey}`);
+                return res.status(200).send(cachedValue);
+            }
+    
+            // Nếu không có cache, đọc từ database
             const value = await Persistent.view(id);
+            
+            // Lưu vào Redis cache với thời hạn (VD: 1 phút)
+            await publisherClient.setEx(cacheKey, 60, String(value));
+            console.log(`[Cache] Đã cache ${cacheKey} trong 60 giây`);
+    
             res.status(200).send(String(value));
+    
         } catch (err) {
-            console.error(`[GET /get/${req.params.id}] Error:`, err);
+            console.error(`[GET /get/${id}] Error:`, err);
             if (err.message && err.message.includes('not found')) {
                 res.status(404).send('Key not found');
             } else {
