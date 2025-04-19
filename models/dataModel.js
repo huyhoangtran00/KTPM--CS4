@@ -1,10 +1,10 @@
 const { Sequelize, DataTypes } = require('sequelize');
 
-// Khởi tạo kết nối database
-const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: './db/app.db',
-  logging: false // Tắt log query (có thể bật khi debug)
+// Khởi tạo kết nối database với PostgreSQL
+const sequelize = new Sequelize('cs4', 'postgres', '12344321', {
+  host: 'localhost', // hoặc host của bạn
+  dialect: 'postgres',
+  logging: false // Tắt log query (bật khi debug nếu cần)
 });
 
 // Định nghĩa model Data
