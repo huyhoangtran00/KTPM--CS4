@@ -24,7 +24,9 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
+    // Lấy giá trị USE_SOCKET từ biến config
+    const USE_SOCKET = true; 
+
     const locationPath = window.location.pathname.split("/");
     const key = locationPath[locationPath.length - 1];
 
@@ -41,12 +43,15 @@
         console.error('Error:', error);
         document.getElementById('value').innerText = 'Error loading value';
       });
-
+  // Kiểm tra xem có cần dùng WebSocket hay không
+  if (USE_SOCKET) {
+    const socket = io();
     socket.on('updateValue', (data) => {
       if (data.key === key) {
         document.getElementById('value').innerText = data.value;
       }
     });
+  }
   </script>
 </body>
 </html>

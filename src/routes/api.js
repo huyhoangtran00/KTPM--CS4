@@ -1,15 +1,27 @@
 const express = require('express');
 const router = express.Router();
 const Persistent = require('../lib/db.js');
-const { publisherClient } = require('../redis/publisher');
-const redisChannel = 'dataUpdates';
+
+// Kiểm tra cấu hình để có sử dụng Redis hay không
+const { USE_REDIS } = require('../config'); // Đảm bảo đường dẫn đúng
+let publisherClient = null; // Đảm bảo publisherClient chưa được khởi tạo ngoài Redis
+let redisChannel = 'dataUpdates'; // Đảm bảo sử dụng cùng một kênh
+
+if (USE_REDIS) {
+    const { publisherClient: redisPublisher } = require('../redis/publisher');  // Đảm bảo đúng đường dẫn đến redis/publisher.js
+    publisherClient = redisPublisher;
+}
 
 router.post('/add', async (req, res) => {
-    if (!publisherClient.isReady) return res.status(503).send("Redis not ready.");
     const { key, value } = req.body;
     try {
         const result = await Persistent.write(key, value);
-        await publisherClient.publish(redisChannel, JSON.stringify({ key, value }));
+
+        // Nếu có sử dụng Redis thì publish
+        if (USE_REDIS && publisherClient && publisherClient.isReady) {
+            await publisherClient.publish(redisChannel, JSON.stringify({ key, value }));
+        }
+
         res.status(200).send(`${result} successfully!`);
     } catch (err) {
         console.error('[POST /api/add] Error:', err);

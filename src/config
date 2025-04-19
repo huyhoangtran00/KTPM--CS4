@@ -1,0 +1,5 @@
+module.exports = {
+    USE_REDIS: true,  // bật true nếu muốn dùng Redis Pub/Sub
+    USE_SOCKET: true,  // bật true nếu muốn dùng Socket.IO
+};
+  

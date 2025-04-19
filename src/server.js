@@ -7,11 +7,16 @@ const { setupRedis, publisherClient } = require('./redis/publisher');
 const { initSubscriber } = require('./redis/subscriber');
 const setupSocketIO = require('./sockets/io');
 const apiRoutes = require('./routes/api');
+const { USE_REDIS, USE_SOCKET } = require('./config');
 
 const port = 8080;
 const app = express();
 const server = http.createServer(app);
-const io = setupSocketIO(server);
+let io = null;
+
+if (USE_SOCKET) {
+  io = setupSocketIO(server);
+}
 
 app.use(bodyParser.json());
 app.use(cors());
@@ -25,9 +30,11 @@ app.get('/all', (req, res) => res.sendFile(path.join(__dirname, 'public/all.html
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
 
 (async () => {
+  if (USE_REDIS) {
     await setupRedis();
-    await initSubscriber(io); // Pass socket.io instance
-    server.listen(port, () => {
-        console.log(`Server is running at http://localhost:${port}`);
-    });
+    await initSubscriber(io); // io có thể null nếu không dùng socket
+  }
+  server.listen(port, () => {
+    console.log(`Server is running at http://localhost:${port}`);
+  });
 })();
