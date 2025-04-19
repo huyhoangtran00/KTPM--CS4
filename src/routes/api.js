@@ -1,38 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const Persistent = require('../lib/db.js');
+const Persistent = require('../lib/db');
+const { viewWithCache } = require('../redis/cache');
+const { USE_REDIS } = require('../config');
 
-// Kiểm tra cấu hình để có sử dụng Redis hay không
-const { USE_REDIS } = require('../config'); // Đảm bảo đường dẫn đúng
-let publisherClient = null; // Đảm bảo publisherClient chưa được khởi tạo ngoài Redis
-let redisClient = null; // Đảm bảo redisClient chưa được khởi tạo ngoài Redis
-let redisChannel = 'dataUpdates'; // Đảm bảo sử dụng cùng một kênh
+let publisherClient = null;
+let redisClient = null;
+const redisChannel = 'dataUpdates';
 
 if (USE_REDIS) {
-    const { publisherClient: redisPublisher } = require('../redis/publisher');  // Đảm bảo đúng đường dẫn đến redis/publisher.js
+    redisClient = require('../redis/cacheClient');
+    const { publisherClient: redisPublisher } = require('../redis/publisher');
     publisherClient = redisPublisher;
-}
-
-// Cache-aside helper
-async function viewWithCache(key) {
-    const cacheKey = `data:${key}`;
-    try {
-        const cachedValue = await redisClient.get(cacheKey);
-        if (cachedValue !== null) {
-            console.log(`[CACHE] HIT for key: ${key}`);
-            return cachedValue;
-        }
-
-        console.log(`[CACHE] MISS for key: ${key}`);
-        const dbValue = await Persistent.view(key);
-        if (dbValue !== null) {
-            await redisClient.set(cacheKey, dbValue);
-        }
-        return dbValue;
-    } catch (err) {
-        console.error('[CACHE] Redis error:', err);
-        return await Persistent.view(key); // fallback nếu Redis lỗi
-    }
 }
 
 router.post('/add', async (req, res) => {
@@ -45,7 +24,7 @@ router.post('/add', async (req, res) => {
             console.log(`[CACHE] Deleted cache for key: ${key}`);
         }
 
-        if (USE_REDIS && publisherClient && publisherClient.isReady) {
+        if (USE_REDIS && publisherClient?.isReady) {
             await publisherClient.publish(redisChannel, JSON.stringify({ key, value }));
         }
 
@@ -59,7 +38,7 @@ router.post('/add', async (req, res) => {
 router.get('/get/:id', async (req, res) => {
     const key = req.params.id;
     try {
-        const value = USE_REDIS && redisClient
+        const value = USE_REDIS
             ? await viewWithCache(key)
             : await Persistent.view(key);
 
