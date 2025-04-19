@@ -6,11 +6,26 @@ const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
 const redis = require('redis'); // Import redis client
-
+// Thêm các require cần thiết
+const axios = require('axios');
+const cron = require('node-cron');
 // --- Configuration ---
 const port = 8080;
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'; // Use REDIS_URL from env if available, otherwise default
-const redisChannel = 'dataUpdates'; // Define a channel name
+const GOLD_API_URL = 'https://api.gold-api.com/price/';
+
+// Cấu hình API giá vàng
+const METALS = [
+    { "name": "Silver", "symbol": "XAG" },
+    { "name": "Gold", "symbol": "XAU" },
+    { "name": "Bitcoin", "symbol": "BTC" },
+    { "name": "Ethereum", "symbol": "ETH" },
+    { "name": "Palladium", "symbol": "XPD" },
+    { "name": "Copper", "symbol": "HG" }
+  ];
+
+
+
 
 // --- App and Server Setup ---
 const app = express();
@@ -42,23 +57,19 @@ async function setupRedis() {
 
         await subscriberClient.connect();
         console.log('[Redis Subscriber] Connected successfully.');
-
-        // Setup the subscriber listener AFTER connection
-        // Listen for messages on the specified channel
-        await subscriberClient.subscribe(redisChannel, (message, channel) => {
-            if (channel === redisChannel) {
-                console.log(`[Redis Subscriber] Received message from channel '${channel}': ${message}`);
+        for (const metal of METALS) {
+            const channelName = metal.name; // Use the metal name as the channel name`;
+            await subscriberClient.subscribe(channelName, (message, channel) => {
+                console.log(`[Redis Subscriber] Message from ${channel}: ${message}`);
                 try {
-                    const data = JSON.parse(message); // Parse the message (should be JSON string)
-                    // Broadcast the data via Socket.IO
-                    io.emit('updateValue', { key: data.key, value: data.value });
-                    console.log(`[Socket.IO] Broadcasted update for key: ${data.key}`);
-                } catch (parseError) {
-                    console.error('[Redis Subscriber] Error parsing message:', parseError);
+                    const data = JSON.parse(message);
+                    io.emit(data.key, { key: data.key, value: data.value }); // Optional: Emit per-channel
+                } catch (err) {
+                    console.error(`[Redis Subscriber] Failed to parse message from ${channel}`, err);
                 }
-            }
-        });
-        console.log(`[Redis Subscriber] Subscribed to channel: ${redisChannel}`);
+            });
+            console.log(`[Redis Subscriber] Subscribed to channel: ${channelName}`);
+        }
 
     } catch (err) {
         console.error('[Redis] Failed to connect or subscribe:', err);
@@ -76,9 +87,55 @@ io.on('connection', (socket) => {
     });
 });
 
+// Hàm lấy giá và lưu vào DB (không cần API key)
+async function fetchAndStoreMetalPrices() {
+    console.log('[Metal Price] Bắt đầu cập nhật giá...');
+    
+    for (const metal of METALS) {
+        try {
+            // Gọi API để lấy giá (không cần headers)
+            const response = await axios.get(`${GOLD_API_URL}${metal.symbol}`);
+            
+            // Kiểm tra cấu trúc response và lấy giá
+            let price;
+            if (response.data && typeof response.data.price !== 'undefined') {
+                price = response.data.price;
+            } else {
+                throw new Error('Cấu trúc response không hợp lệ');
+            }
+            
+            console.log(`[Metal Price] ${metal.name}: ${price}`);
+            
+            // Lưu vào DB với key là tên loại, value là giá
+            await Persistent.write(metal.name, price.toString());
+            console.log(`[Metal Price] Đã lưu ${metal.name} vào DB`);
+            
+            // Gửi thông báo cập nhật qua Redis
+            const message = JSON.stringify({ 
+                key: metal.name, 
+                value: price 
+            });
+            await publisherClient.publish(metal.name, message);
+            console.log(`[Metal Price] Đã gửi cập nhật ${metal.name} qua Redis`);
+            
+        } catch (error) {
+            console.error(`[Metal Price] Lỗi khi lấy giá ${metal.name}:`, error.message);
+            // Có thể thêm logic ghi log lỗi chi tiết hơn ở đây
+        }
+        
+        // Tạm dừng giữa các request để tránh bị rate limit
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    console.log('[Metal Price] Hoàn thành cập nhật giá');
+}
 
-// --- Express Routes ---
-
+// Thiết lập cron job (cập nhật mỗi 5 phút)
+cron.schedule('*/1 * * * *', async () => {
+    console.log('[Cron] Tự động cập nhật giá');
+    await fetchAndStoreMetalPrices();
+  });
+  
 // Publisher: When data is added/updated, publish an event via Redis
 app.post('/add', async (req, res) => {
     // Ensure publisher is ready before processing (optional, depends on error handling strategy)
@@ -97,8 +154,8 @@ app.post('/add', async (req, res) => {
 
         // Publish the 'dataUpdated' event via Redis
         const message = JSON.stringify({ key, value }); // Convert data to JSON string
-        await publisherClient.publish(redisChannel, message);
-        console.log(`[Redis Publisher] Published message to channel '${redisChannel}': ${message}`);
+        await publisherClient.publish(key, message);
+        console.log(`[Redis Publisher] Published message to channel '${key}': ${message}`);
 
     } catch (err) {
         console.error("[POST /add] Error:", err);
@@ -142,12 +199,14 @@ app.get('/add', (req, res) => {
 (async () => {
     // Setup Redis connections and subscriptions first
     await setupRedis();
+    await fetchAndStoreMetalPrices();
 
     // Then start the HTTP server
     server.listen(port, () => {
         console.log(`Server is running on http://localhost:${port}`);
         console.log(`Pub/Sub Pattern using Redis integrated.`);
         console.log(` - Redis Publisher: Connected`);
-        console.log(` - Redis Subscriber: Connected and listening on channel '${redisChannel}'`);
+        console.log(` - Redis Subscriber: Connected and listening on channel successfully`);
+        console.log(` - Socket.IO: Listening for connections`);
     });
 })();

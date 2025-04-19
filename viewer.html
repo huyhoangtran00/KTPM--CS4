@@ -64,9 +64,13 @@
             .catch(error => console.error('Error:', error));
 
         // Lắng nghe sự kiện updateValue từ server
-        socket.on('updateValue', (data) => {
+        socket.on(key, (data) => {
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(`[${timestamp}] Đã nhận dữ liệu mới từ server:`, data);
             if (data.key === key) {
+
                 document.getElementById('value').innerText = data.value;  // Cập nhật giá trị khi có sự thay đổi
+   
             }
         });
     </script>
