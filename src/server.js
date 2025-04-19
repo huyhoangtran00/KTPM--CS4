@@ -22,6 +22,31 @@ app.use(bodyParser.json());
 app.use(cors());
 app.use('/api', apiRoutes);
 
+// Hàm xử lý cache-aside
+async function viewWithCache(key) {
+  const cacheKey = `data:${key}`;
+  try {
+    const cachedValue = await redisClient.get(cacheKey);
+
+    if (cachedValue !== null) {
+      console.log(`[CACHE] Cache hit for key: ${key}`);
+      return cachedValue;
+    }
+
+    console.log(`[CACHE] Cache miss for key: ${key}`);
+    const dbValue = await Persistent.view(key);
+    if (dbValue !== null) {
+      await redisClient.set(cacheKey, dbValue);
+    }
+
+    return dbValue;
+  } catch (err) {
+    console.error('[CACHE] Redis error:', err);
+    return await Persistent.view(key);
+  }
+}
+
+
 // Serve static pages
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/viewer/:id', (req, res) => res.sendFile(path.join(__dirname, 'public/viewer.html')));
