@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Add Record</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 100px;
+    }
+    input, button {
+      padding: 8px;
+      margin: 10px;
+    }
+    #response {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Add Record</h1>
+
+  <form id="addForm">
+    <input type="text" id="key" placeholder="Key" required />
+    <input type="text" id="value" placeholder="Value" required />
+    <button type="submit">Submit</button>
+  </form>
+
+  <div id="response"></div>
+
+  <button onclick="location.href='/'">Back to Home</button>
+
+  <script>
+    document.getElementById("addForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const key = document.getElementById("key").value;
+      const value = document.getElementById("value").value;
+      const responseDiv = document.getElementById("response");
+
+      try {
+        const response = await fetch("/api/add", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ key, value }),
+        });
+
+        const result = await response.text();
+        responseDiv.textContent = result;
+      } catch (error) {
+        responseDiv.textContent = "Error: " + error.message;
+      }
+    });
+  </script>
+</body>
+</html>

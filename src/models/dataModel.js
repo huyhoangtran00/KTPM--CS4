@@ -1,12 +1,13 @@
 const { Sequelize, DataTypes } = require('sequelize');
 
 // Khởi tạo kết nối database
+const path = require('path');
+
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: './db/app.db',
-  logging: false // Tắt log query (có thể bật khi debug)
+  storage: path.resolve(__dirname, '../db/app.db'),
+  logging: false
 });
-
 // Định nghĩa model Data
 const Data = sequelize.define('Data', {
   keyID: {

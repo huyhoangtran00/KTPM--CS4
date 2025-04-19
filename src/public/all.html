@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Danh sách key</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background-color: #f9f9f9; }
+    h2 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; }
+    th, td { padding: 10px; border: 1px solid #ddd; text-align: center; }
+    th { background: #eee; }
+    a { color: blue; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { margin-top: 20px; text-align: center; }
+    #errorMsg {
+      color: red;
+      text-align: center;
+      margin-top: 20px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h2>Danh sách tất cả key-value</h2>
+
+  <div id="errorMsg"></div>
+
+  <table id="keyTable" style="display: none;">
+    <thead>
+      <tr>
+        <th>Key</th>
+        <th>Value</th>
+        <th>Xem</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="back">
+    <a href="/">← Quay về trang chủ</a>
+  </div>
+
+  <script>
+    fetch('/api/all')
+      .then(res => {
+        if (!res.ok) throw new Error("Lỗi server");
+        return res.json();
+      })
+      .then(data => {
+        const tbody = document.querySelector('#keyTable tbody');
+        const table = document.getElementById("keyTable");
+
+        if (data.length === 0) {
+          document.getElementById("errorMsg").textContent = "Không có dữ liệu.";
+          return;
+        }
+
+        data.forEach(item => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${item.keyID}</td>
+            <td>${item.value}</td>
+            <td><a href="/viewer/${item.keyID}">Xem</a></td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        table.style.display = "table";
+      })
+      .catch(err => {
+        document.getElementById("errorMsg").textContent =
+          `❌ Lỗi khi tải dữ liệu: ${err.message}`;
+      });
+  </script>
+</body>
+</html>

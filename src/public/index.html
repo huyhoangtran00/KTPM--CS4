@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Home</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 100px;
+    }
+    input, button {
+      padding: 8px;
+      margin: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Welcome</h1>
+
+  <button onclick="location.href='/add'">Add Record</button>
+
+  <div>
+    <input type="text" id="viewerKey" placeholder="Enter key to view">
+    <button onclick="goToViewer()">View Record</button>
+  </div>
+
+  <a href="/all">📄 Xem tất cả các key</a>
+
+  <script>
+    function goToViewer() {
+      const key = document.getElementById("viewerKey").value;
+      if (key.trim() !== "") {
+        window.location.href = `/viewer/${key}`;
+      }
+    }
+  </script>
+</body>
+</html>

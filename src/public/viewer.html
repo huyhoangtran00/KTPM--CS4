@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 100px;
+    }
+    #value {
+      font-size: 1.5em;
+      margin-top: 20px;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+  <h1>Current Value</h1>
+  <p id="value">Loading...</p>
+
+  <button onclick="location.href='/'">Back to Home</button>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const locationPath = window.location.pathname.split("/");
+    const key = locationPath[locationPath.length - 1];
+
+    // Sửa lại đường dẫn fetch về /api/get/:key
+    fetch(`/api/get/${key}`)
+      .then(response => {
+        if (!response.ok) throw new Error("Not Found");
+        return response.text();
+      })
+      .then(data => {
+        document.getElementById('value').innerText = data;
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('value').innerText = 'Error loading value';
+      });
+
+    socket.on('updateValue', (data) => {
+      if (data.key === key) {
+        document.getElementById('value').innerText = data.value;
+      }
+    });
+  </script>
+</body>
+</html>
