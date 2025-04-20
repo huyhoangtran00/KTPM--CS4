@@ -11,7 +11,8 @@
     const cron = require('node-cron');
     const CircuitBreaker = require('opossum');
     const fs = require('fs');
-    const logStream = fs.createWriteStream('latency.log', { flags: 'a' });
+    const rateLimit = require('express-rate-limit');
+
     // --- Configuration ---
     const port = 8080;
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -35,8 +36,20 @@
         }
     });
 
+
+    
+
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 phút
+    max: 100, // tối đa 100 request mỗi IP trong 15 phút
+    message: 'Too many requests from this IP, please try again after 15 minutes',
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
     app.use(bodyParser.json());
     app.use(cors());
+    app.use(limiter); // Áp dụng cho tất cả các route
 
     const publisherClient = redis.createClient({ url: redisUrl });
     const subscriberClient = publisherClient.duplicate(); 
