@@ -12,6 +12,7 @@
     const CircuitBreaker = require('opossum');
     const fs = require('fs');
     const rateLimit = require('express-rate-limit');
+    const RedisStore = require('rate-limit-redis');
 
     // --- Configuration ---
     const port = 8080;
@@ -37,22 +38,15 @@
     });
 
 
-    
 
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 phút
-    max: 100, // tối đa 100 request mỗi IP trong 15 phút
-    message: 'Too many requests from this IP, please try again after 15 minutes',
-    standardHeaders: true,
-    legacyHeaders: false,
-});
 
     app.use(bodyParser.json());
     app.use(cors());
-    app.use(limiter); // Áp dụng cho tất cả các route
 
     const publisherClient = redis.createClient({ url: redisUrl });
     const subscriberClient = publisherClient.duplicate(); 
+    const redisClientForRateLimit = redis.createClient({ url: redisUrl });
+
 
     publisherClient.on('error', (err) => console.error('[Redis Publisher] Error:', err));
     subscriberClient.on('error', (err) => console.error('[Redis Subscriber] Error:', err));
@@ -107,9 +101,39 @@ const limiter = rateLimit({
         try {
             await publisherClient.connect();
             console.log('[Redis Publisher] Connected successfully.');
-
+            await redisClientForRateLimit.connect()
+            console.log('[Redis Rate Limit] Connected successfully.');
             await subscriberClient.connect();
             console.log('[Redis Subscriber] Connected successfully.');
+
+
+            const limiter = rateLimit({
+                store: new RedisStore({
+                    sendCommand: (...args) => redisClientForRateLimit.sendCommand(args),
+                    prefix: 'ratelimit:', // Redis key prefix
+                    expiry: 15 * 60 // 15 minutes in seconds
+                }),
+                windowMs: 15 * 60 * 1000, // 15 minutes
+                max: 100, // limit each IP to 100 requests per windowMs
+                message: 'Too many requests from this IP, please try again after 15 minutes',
+                standardHeaders: true,
+                legacyHeaders: false,
+                // Optional: Different rate limiting for different routes
+                keyGenerator: (req) => {
+                    return `${req.ip}:${req.path}`; // Different limits per route
+                },
+                handler: (req, res) => {
+                    res.status(429).json({
+                        error: 'Too many requests',
+                        window: '15 minutes',
+                        max: '100 requests',
+                        remaining: res.getHeader('X-RateLimit-Remaining')
+                    });
+                }
+            });
+        
+            app.use(limiter); // Áp dụng cho tất cả các route
+        
             for (const metal of METALS) {
                 const channelName = metal.name; 
                 await subscriberClient.subscribe(channelName, (message, channel) => {
