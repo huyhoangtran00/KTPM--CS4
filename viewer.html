@@ -5,30 +5,84 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Realtime Viewer</title>
     <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
             background-color: #121212;
             color: #f5f5f5;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            padding: 2rem 1rem;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
         }
 
         h1 {
-            font-size: 2.5rem;
-            margin-bottom: 20px;
+            font-size: 2rem;
             color: #00ffd5;
             text-shadow: 0 0 10px #00ffd5;
+            text-align: center;
+            margin-bottom: 0.5rem;
         }
 
         #value {
-            font-size: 3rem;
+            font-size: 2.5rem;
             color: #ffcc00;
             text-shadow: 0 0 15px #ffcc00;
             animation: pulse 2s infinite;
+            text-align: center;
+            min-height: 60px;
+        }
+
+        #latency {
+            font-size: 1.1rem;
+            color: #00ffaa;
+            text-align: center;
+            margin: 0.5rem 0;
+        }
+
+        .chart-container {
+            width: 100%;
+            max-width: 600px;
+            height: 250px;
+            margin: 1rem 0;
+            position: relative;
+        }
+
+        .stats {
+            color: #888;
+            font-size: 0.9rem;
+            text-align: center;
+            margin-top: 1rem;
+            width: 100%;
+        }
+
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.75rem;
+            }
+            
+            #value {
+                font-size: 2rem;
+            }
+            
+            .chart-container {
+                height: 200px;
+            }
         }
 
         @keyframes pulse {
@@ -36,43 +90,130 @@
             50% { opacity: 1; }
             100% { opacity: 0.7; }
         }
-
-        small {
-            margin-top: 20px;
-            color: #888;
-            font-size: 0.9rem;
-        }
     </style>
 </head>
 <body>
-    <h1>Giá trị hiện tại:</h1>
-    <p id="value">Đang tải...</p>
-    <small>(Tự động cập nhật khi có sự thay đổi)</small>
+    <div class="container">
+        <h1>Giá trị hiện tại</h1>
+        <div id="value">Đang tải...</div>
+        <div id="latency">Độ trễ: -</div>
+        
+        <div class="chart-container">
+            <canvas id="latency-chart"></canvas>
+        </div>
+        
+        <div class="stats">
+            <div id="last-update">Lần cập nhật cuối: -</div>
+            <div id="avg-latency" style="margin-top: 0.5rem;">Độ trễ trung bình: -</div>
+            <small style="display: block; margin-top: 1rem;">(Tự động cập nhật khi có sự thay đổi)</small>
+        </div>
+    </div>
 
-    <script src="/socket.io/socket.io.js"></script> <!-- Kết nối Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        const socket = io();  // Kết nối với server qua Socket.IO
+        // Khởi tạo biến
+        const socket = io();
         const locationPath = window.location.pathname.split("/");
-        const key = locationPath[locationPath.length - 1];  // Lấy key từ URL
+        const key = locationPath[locationPath.length - 1];
+        const latencyData = [];
+        const maxDataPoints = 20;
+        
+        // Khởi tạo biểu đồ
+        const ctx = document.getElementById('latency-chart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array(maxDataPoints).fill(''),
+                datasets: [{
+                    label: 'Độ trễ (ms)',
+                    data: Array(maxDataPoints).fill(0),
+                    borderColor: '#00ffaa',
+                    backgroundColor: 'rgba(0, 255, 170, 0.1)',
+                    tension: 0.1,
+                    fill: true,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#fff'
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Thời gian (ms)',
+                            color: '#fff'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#fff'
+                        }
+                    },
+                    x: {
+                        display: false,
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
 
-        // Gửi yêu cầu để lấy giá trị ban đầu của key
+        // Lấy giá trị ban đầu
         fetch(`/get/${key}`)
             .then(response => response.text())
             .then(data => {
-                document.getElementById('value').innerText = data;  // Hiển thị giá trị ban đầu
+                document.getElementById('value').textContent = data;
             })
             .catch(error => console.error('Error:', error));
 
-        // Lắng nghe sự kiện updateValue từ server
+        // Lắng nghe sự kiện từ server
         socket.on(key, (data) => {
-            const timestamp = new Date().toLocaleTimeString();
-            console.log(`[${timestamp}] Đã nhận dữ liệu mới từ server:`, data);
-            if (data.key === key) {
-
-                document.getElementById('value').innerText = data.value;  // Cập nhật giá trị khi có sự thay đổi
-   
+            const receiveTime = Date.now();
+            let latency = 0;
+            
+            if (data.serverTime) {
+                latency = receiveTime - data.serverTime;
             }
+            
+            // Cập nhật UI
+            document.getElementById('value').textContent = data.value;
+            document.getElementById('latency').textContent = `Độ trễ: ${latency}ms`;
+            document.getElementById('last-update').textContent = `Lần cập nhật cuối: ${new Date(receiveTime).toLocaleTimeString()}`;
+            
+            if (latency > 0) {
+                latencyData.push(latency);
+                if (latencyData.length > maxDataPoints) {
+                    latencyData.shift();
+                }
+                
+                const avgLatency = latencyData.length > 0 
+                    ? Math.round(latencyData.reduce((a, b) => a + b, 0) / latencyData.length)
+                    : 0;
+                document.getElementById('avg-latency').textContent = `Độ trễ trung bình: ${avgLatency}ms (${latencyData.length} lần)`;
+                
+                updateChart(latency);
+            }
+            
+            console.log(`[${new Date(receiveTime).toLocaleTimeString()}] Nhận ${key}=${data.value} | Độ trễ: ${latency}ms`);
         });
+
+        function updateChart(latency) {
+            const newData = [...chart.data.datasets[0].data.slice(1), latency];
+            chart.data.datasets[0].data = newData;
+            chart.update();
+        }
     </script>
 </body>
 </html>
