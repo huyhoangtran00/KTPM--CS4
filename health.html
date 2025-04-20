@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Health Check</title>
+    <style>
+        :root {
+            --primary-color: #007bff; /* Blue */
+            --secondary-color: #6c757d; /* Grey */
+            --success-color: #28a745; /* Green */
+            --warning-color: #ffc107; /* Yellow */
+            --danger-color: #dc3545; /* Red */
+            --info-color: #17a2b8; /* Cyan */
+            --background-color: #e9ecef; /* Light Grey Background */
+            --surface-color: #ffffff; /* White Card */
+            --text-color: #343a40; /* Dark Grey Text */
+            --border-color: #dee2e6; /* Light Border */
+            --shadow-color: rgba(0, 0, 0, 0.1);
+            --border-radius: 0.5rem;
+            --padding-base: 1.5rem;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif; /* Ưu tiên Roboto nếu link font hoặc Arial */
+            font-family: Arial, sans-serif; /* Fallback */
+            background-color: var(--background-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Dùng min-height thay vì height để tránh cắt nội dung */
+            padding: 20px; /* Thêm padding cho mobile */
+            line-height: 1.6;
+        }
+
+        .container {
+            background-color: var(--surface-color);
+            padding: var(--padding-base);
+            border-radius: var(--border-radius);
+            box-shadow: 0 0.5rem 1rem var(--shadow-color);
+            width: 100%;
+            max-width: 500px; /* Tăng max-width một chút */
+            text-align: left; /* Căn trái nội dung */
+        }
+
+        h1 {
+            font-size: 1.8rem; /* Tăng kích thước tiêu đề */
+            margin-bottom: var(--padding-base);
+            color: var(--primary-color); /* Màu tiêu đề */
+            text-align: center; /* Căn giữa tiêu đề */
+            border-bottom: 1px solid var(--border-color); /* Đường kẻ dưới tiêu đề */
+            padding-bottom: 1rem;
+        }
+
+        .health-info dl { /* Sử dụng Definition List cho cặp Key-Value */
+            margin: 0;
+            padding: 0;
+        }
+
+        .health-info dt { /* Key (tên trạng thái) */
+            font-weight: bold;
+            float: left; /* Đẩy key sang trái */
+            width: 45%; /* Chiếm 45% chiều rộng */
+            margin-right: 5%; /* Khoảng cách giữa key và value */
+            clear: both; /* Bắt đầu trên dòng mới */
+            margin-bottom: 0.5rem;
+            color: var(--secondary-color); /* Màu cho Key */
+        }
+
+        .health-info dd { /* Value (giá trị trạng thái) */
+            margin-left: 50%; /* Bắt đầu sau khoảng cách của key */
+            margin-bottom: 0.5rem;
+            word-break: break-word; /* Ngắt dòng nếu nội dung dài */
+        }
+
+         .health-info dd span { /* Style cho nội dung giá trị */
+             font-weight: normal; /* Bỏ bold mặc định của span cũ */
+             color: var(--text-color);
+         }
+
+        button {
+            display: block; /* Nút chiếm toàn bộ chiều rộng */
+            width: 100%;
+            margin-top: var(--padding-base);
+            padding: 0.75rem var(--padding-base); /* Tăng padding nút */
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease; /* Thêm hiệu ứng chuyển đổi */
+        }
+
+        button:hover {
+            background-color: #218838; /* Màu xanh đậm hơn khi hover */
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 123, 255, 0.2); /* Shadow khi hover (có thể dùng màu primary) */
+        }
+
+        button:active {
+            background-color: #1e7e34; /* Màu xanh khi click */
+        }
+
+        /* Có thể thêm các class để tô màu trạng thái specific nếu API trả về */
+        /* Ví dụ: <span class="status status-ok">OK</span> */
+        .status {
+            font-weight: bold;
+        }
+        .status.ok { color: var(--success-color); }
+        .status.error { color: var(--danger-color); }
+        .status.warning { color: var(--warning-color); }
+        .status.loading { color: var(--secondary-color); font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>System Health Status</h1>
+        <div class="health-info">
+            <dl> 
+                <dt>Uptime:</dt>
+                <dd><span id="uptime" class="status loading">Loading...</span></dd>
+
+                <dt>Message:</dt>
+                <dd><span id="message" class="status loading">Loading...</span></dd>
+
+                <dt>Timestamp:</dt>
+                <dd><span id="timestamp" class="status loading">Loading...</span></dd>
+
+                <dt>Redis Publisher:</dt>
+                <dd><span id="redisPublisher" class="status loading">Loading...</span></dd>
+
+                <dt>Redis Subscriber:</dt>
+                <dd><span id="redisSubscriber" class="status loading">Loading...</span></dd>
+
+                <dt>Queue Status:</dt>
+                <dd><span id="queueStatus" class="status loading">Loading...</span></dd>
+
+                <dt>Database:</dt>
+                <dd><span id="database" class="status loading">Loading...</span></dd>
+            </dl>
+        </div>
+        <button id="refreshBtn">Refresh Status</button>
+    </div>
+
+    <script>
+        async function fetchHealthData() {
+             // Thêm class loading và reset text khi bắt đầu fetch
+             document.querySelectorAll('.health-info dd span').forEach(span => {
+                 span.textContent = 'Loading...';
+                 span.className = 'status loading'; // Reset class
+             });
+
+            try {
+                const response = await fetch('http://localhost:8080/health');
+                const data = await response.json();
+
+                // Update the UI with the health data
+                document.getElementById('uptime').textContent = data.uptime;
+                document.getElementById('message').textContent = data.message;
+                document.getElementById('timestamp').textContent = new Date(data.timestamp).toLocaleString();
+
+                // Cập nhật trạng thái và có thể thêm class màu sắc
+                updateStatusSpan('redisPublisher', data.redisPublisher);
+                updateStatusSpan('redisSubscriber', data.redisSubscriber);
+                // QueueStatus là một đối tượng JSON, cần xử lý hiển thị
+                document.getElementById('queueStatus').textContent = JSON.stringify(data.queueStatus, null, 2); // Format JSON
+                document.getElementById('queueStatus').className = 'status'; // Bỏ loading
+
+                // Giả định data.database trả về chuỗi trạng thái như "OK", "Error", "Connecting"
+                updateStatusSpan('database', data.database);
+
+            } catch (error) {
+                console.error('Error fetching health data:', error);
+                // Cập nhật tất cả các span sang trạng thái lỗi nếu fetch thất bại
+                document.querySelectorAll('.health-info dd span').forEach(span => {
+                    span.textContent = 'Error fetching data';
+                    span.className = 'status error';
+                });
+            }
+        }
+
+        // Helper function to update status span text and class
+        function updateStatusSpan(id, statusText) {
+             const span = document.getElementById(id);
+             span.textContent = statusText;
+             span.className = 'status'; // Reset class
+
+             // Thêm class màu sắc dựa trên nội dung (có thể tùy chỉnh logic này)
+             if (statusText && typeof statusText === 'string') {
+                 const lowerStatus = statusText.toLowerCase();
+                 if (lowerStatus.includes('ok') || lowerStatus.includes('connected') || lowerStatus.includes('closed')) {
+                     span.classList.add('ok');
+                 } else if (lowerStatus.includes('error') || lowerStatus.includes('failed')) {
+                     span.classList.add('error');
+                 } else if (lowerStatus.includes('connecting') || lowerStatus.includes('half-open')) {
+                      span.classList.add('warning'); // Hoặc info
+                 }
+             }
+        }
+
+        // Fetch the health data when the page loads
+        window.onload = fetchHealthData;
+
+        // Refresh the health data when the button is clicked
+        document.getElementById('refreshBtn').addEventListener('click', fetchHealthData);
+    </script>
+</body>
+</html>

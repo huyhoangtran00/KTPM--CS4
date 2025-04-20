@@ -7,6 +7,7 @@ const sequelize = new Sequelize('cs4', 'postgres', '12344321', {
   logging: false // Tắt log query (bật khi debug nếu cần)
 });
 
+
 // Định nghĩa model Data
 const Data = sequelize.define('Data', {
   keyID: {
@@ -23,9 +24,15 @@ const Data = sequelize.define('Data', {
   timestamps: false // Không sử dụng createdAt và updatedAt
 });
 
+
+
+
+
 // Đồng bộ hóa model với database
 sequelize.sync()
   .then(() => console.log('Database & tables synced!'))
   .catch(err => console.error('Error syncing database:', err));
 
+  
 module.exports = Data;
+

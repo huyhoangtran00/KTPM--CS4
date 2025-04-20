@@ -174,8 +174,53 @@ app.get('/get/:id', async (req, res) => {
   }
 });
 
+app.get('/health', async (req, res) => {
+    const health = {
+      uptime: process.uptime(),
+      message: 'OK',
+      timestamp: Date.now(),
+      redisPublisher: 'unknown',
+      redisSubscriber: 'unknown',
+      queueStatus: 'unknown',
+      database: 'unknown'
+    };
+  
+    try {
+      await publisherClient.ping();
+      health.redisPublisher = 'connected';
+    } catch (e) {
+      health.redisPublisher = 'error';
+    }
+  
+    try {
+      await subscriberClient.ping();
+      health.redisSubscriber = 'connected';
+    } catch (e) {
+      health.redisSubscriber = 'error';
+    }
+  
+    try {
+      await Persistent.ping(); // thêm dòng này
+      health.database = 'connected';
+    } catch (e) {
+      health.database = 'error';
+    }
+  
+    try {
+      const jobCounts = await jobQueue.getJobCounts();
+      health.queueStatus = jobCounts;
+    } catch (e) {
+      health.queueStatus = 'error';
+    }
+  
+    res.status(200).json(health);
+  });
+  
+
+
 app.get('/viewer/:id', (req, res) => res.sendFile(path.join(__dirname, 'viewer.html')));
 app.get('/add', (req, res) => res.sendFile(path.join(__dirname, 'add.html')));
+app.get('/ui/health', (req, res) => res.sendFile(path.join(__dirname, 'health.html')));
 
 // --- Startup ---
 (async () => {
